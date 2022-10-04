@@ -6,6 +6,7 @@ import { getLeagueUsers } from './leagueUsers';
 import { waitForAll } from './multiPromise';
 import { get } from 'svelte/store';
 import {transactionsStore} from '$lib/stores';
+import { browser } from '$app/environment';
 
 export const getLeagueTransactions = async (preview, refresh = false) => {
 	const transactionsStoreVal = get(transactionsStore);
@@ -20,7 +21,7 @@ export const getLeagueTransactions = async (preview, refresh = false) => {
 	}
 
 	// if this isn't a refresh data call, check if there are already transactions stored in localStorage
-	if(!refresh) {
+	if(!refresh && browser) {
 		let localTransactions = await JSON.parse(localStorage.getItem("transactions"));
 		// check if transactions have been saved to localStorage before
 		if(localTransactions) {
@@ -48,11 +49,13 @@ export const getLeagueTransactions = async (preview, refresh = false) => {
 		totals
 	};
 
-	// update localStorage
-	localStorage.setItem("transactions", JSON.stringify(transactionPackage));
-
-	// update the store
-	transactionsStore.update(() => transactionPackage);
+    if(browser) {
+	    // update localStorage
+        localStorage.setItem("transactions", JSON.stringify(transactionPackage));
+    
+        // update the store
+        transactionsStore.update(() => transactionPackage);
+    }
 
 	return {
 		transactions: checkPreview(preview, transactions),
@@ -197,17 +200,19 @@ const digestTransactions = (transactionsData, prevManagers, currentSeason, numRo
 			totals.allTime[roster][type]++;
 			
 			// add to season long totals
-			if(!totals.seasons[season]) {
-				totals.seasons[season] = {};
-				for(let i = 1; i <= Object.keys(prevManagers[season]).length; i++) {
-					totals.seasons[season][i] = {
-						trade: 0,
-						waiver: 0,
-						manager: prevManagers[season][i]
-					};
+			if(prevManagers[season]) {
+				if(!totals.seasons[season]) {
+					totals.seasons[season] = {};
+					for(let i = 1; i <= Object.keys(prevManagers[season]).length; i++) {
+						totals.seasons[season][i] = {
+							trade: 0,
+							waiver: 0,
+							manager: prevManagers[season][i]
+						};
+					}
 				}
+				totals.seasons[season][roster][type]++;
 			}
-			totals.seasons[season][roster][type]++;
 		}
 	}
 
@@ -247,7 +252,7 @@ const digestTransaction = (transaction, prevManagers, currentSeason) => {
 		digestedTransaction.type = "trade";
 	}
 	
-	if(season != currentSeason) {
+	if(season != currentSeason && prevManagers[season]) {
 		digestedTransaction.previousOwners = [];
 		for(const roster of transactionRosters) {
 			digestedTransaction.previousOwners.push(prevManagers[season][roster]);
